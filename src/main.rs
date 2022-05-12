@@ -2,49 +2,55 @@ use rand::prelude::*;
 
 fn main() {
     let mut rng = rand::thread_rng();
-    let total_numbers = 10_000;
-    let mut arr: Vec<i32> =  (0..total_numbers).map(|_| rng.gen()).collect();
+    let total_numbers = 5;
 
-    // println!("Arr:");
-    // for val in &arr {
-    //     println!("{}", val)
-    // }
-    
+    let mut arr: Vec<i8> = (0..total_numbers).map(|_| rng.gen()).collect();
+
+    println!("Arr:");
+    for val in &arr {
+        println!("{}", val)
+    }
+
     println!("Starting sorting...");
     merge_sort(&mut arr);
     println!("Array sorted.");
-    // println!("Arr after sort:");
-    // for val in &arr {
-    //     println!("{}", val)
-    // }
+
+    println!("Arr after sort:");
+    for val in &arr {
+        println!("{}", val)
+    }
 }
 
-fn merge_sort(arr: &mut Vec<i32>) {
+fn merge_sort<T: std::cmp::Ord + std::marker::Copy>(arr: &mut Vec<T>) {
     let slice = arr.as_mut_slice();
     merge_sort1(slice);
 }
 
-fn merge_sort1(arr: &mut [i32]) {
+fn merge_sort1<T: std::cmp::Ord + std::marker::Copy>(arr: &mut [T]) {
     let arr_len = arr.len();
+
     if arr_len == 1 {
         return;
     }
 
-    let middle = arr_len / 2;
+    let sorted_arr: Vec<T>;
+    {
+        let middle = arr_len / 2;
+        let (low_part, high_part) = arr.split_at_mut(middle);
 
-    let (low_part, high_part) = arr.split_at_mut(middle);
+        merge_sort1(low_part);
+        merge_sort1(high_part);
 
-    merge_sort1(low_part);
-    merge_sort1(high_part);
+        sorted_arr = merge(arr_len, low_part, high_part);
+    }
 
-    let sorted_arr = merge(arr_len, low_part, high_part);
-
-    arr[..arr_len].copy_from_slice(sorted_arr.as_slice());
+    arr.copy_from_slice(sorted_arr.as_slice());
 }
 
-fn merge(master_slice_len: usize, lower_slice: &[i32], higher_slice: &[i32]) -> Vec<i32> {
+fn merge<T: std::cmp::Ord + std::marker::Copy>(master_slice_len: usize, lower_slice: &[T], higher_slice: &[T]) -> Vec<T> {
     let lower_len = lower_slice.len();
     let higher_len = higher_slice.len();
+
     if master_slice_len != lower_len + higher_len {
         panic!(
             "Inconsistent slice sizes:\nmaster: {}\nlower: {}\nhigher: {}",
@@ -54,7 +60,7 @@ fn merge(master_slice_len: usize, lower_slice: &[i32], higher_slice: &[i32]) -> 
         )
     }
 
-    let mut res_arr: Vec<i32> = Vec::with_capacity(master_slice_len);
+    let mut res_arr: Vec<T> = Vec::with_capacity(master_slice_len);
     let mut lower_index = 0_usize;
     let mut higher_index = 0_usize;
 
