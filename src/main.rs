@@ -1,14 +1,17 @@
 use rand::prelude::*;
 use std::cmp::Ord;
-use std::marker::Copy;
+use std::marker::{Copy, Send};
 use std::thread;
+use std::thread::JoinHandle;
 use std::sync::{Arc, Mutex};
 use std::rc::Rc;
+use std::ops::{Deref, DerefMut};
+use std::collections::HashMap;
 
 fn main() {
     let mut rng = rand::thread_rng();
     let total_numbers = 5;
-    let threads = 1;
+    let threads: i8 = 1;
 
     if threads < 1 {
         panic!("Cannot run merge sort on {0} threads.", threads);
@@ -31,12 +34,20 @@ fn main() {
     }
 }
 
-fn merge_sort<T: Ord + Copy + std::marker::Send>(arr: &mut Vec<T>, threads: i8) {
-    let slice = arr.as_mut_slice();
-    merge_sort1(slice, threads);
+fn merge_sort<'a, T: Ord + Copy + Send>(arr: &'a mut Vec<T>, threads: i8) {
+    let slice: &'a mut [T] = arr.as_mut_slice();
+    if threads == 1 {
+        merge_sort1_singlethread(slice);
+    }
+    else if threads >= 2 {
+        merge_sort1( &Arc::from( &mut Mutex::new(slice) ), threads);
+    }
+    else {
+        panic!("Cannot sort with {0} threads.", threads);
+    }
 }
 
-fn merge_sort1<T: Ord + Copy + std::marker::Send>(arr: &mut [T], threads: i8) {
+fn merge_sort1_singlethread<T: Ord + Copy>(arr: &mut [T]) {
     let arr_len = arr.len();
 
     if arr_len == 1 {
@@ -47,25 +58,9 @@ fn merge_sort1<T: Ord + Copy + std::marker::Send>(arr: &mut [T], threads: i8) {
     {
         let middle = arr_len / 2;
         let (low_part, high_part) = arr.split_at_mut(middle);
-        let low_part_arc = Arc::from( Mutex::new(low_part) );
-        let high_part_arc = Arc::from( Mutex::new(high_part) );
-        let low_threads = threads / 2;
-        let high_threads = threads - low_threads;
-
-        let threaded_low_arc = low_part_arc.clone();
-        let threaded_high_arc = high_part_arc.clone();
         
-        let handle_low = thread::spawn(move || {
-            if let Ok(x) = threaded_low_arc.lock() {
-                merge_sort1(*x, low_threads);
-            }
-        });
-
-        // let handle_high = thread::spawn(move || {
-        //     if let Ok(x) = threaded_high_arc.lock() {
-        //         merge_sort1(*x, high_threads);
-        //     }
-        // });
+        merge_sort1_singlethread(low_part);
+        merge_sort1_singlethread(high_part);
 
         sorted_arr = merge(arr_len, low_part, high_part);
     }
@@ -73,7 +68,54 @@ fn merge_sort1<T: Ord + Copy + std::marker::Send>(arr: &mut [T], threads: i8) {
     arr.copy_from_slice(sorted_arr.as_slice());
 }
 
-fn merge<T: Ord + Copy + std::marker::Send>(master_slice_len: usize, lower_slice: &[T], higher_slice: &[T]) -> Vec<T> {
+fn merge_sort1<'a, T: Ord + Copy + Send>(arr_arc: &'a Arc<&'a mut Mutex<&'a mut [T]>>, threads: i8) {
+    let lock_res = arr_arc.lock();
+
+    let arr: &'a mut [T];
+    let mut mutex_guard;
+    match lock_res {
+        Ok(mut_guard) => mutex_guard = mut_guard,
+        Err(err_num) => panic!("Failed to lock arr: {0}", err_num)
+    }
+    arr = *mutex_guard;
+    let arr_len = arr.len();
+
+    if threads == 1 {
+        merge_sort1_singlethread(arr);
+        return;
+    }
+
+    let low_threads = threads / 2;
+    let high_threads = threads - low_threads;
+
+    let sorted_arr: Vec<T>;
+    {
+        let middle = arr_len / 2;
+        let low_part: &'a mut [T];
+        let high_part: &'a mut [T];
+        (low_part, high_part) = arr.split_at_mut(middle);
+
+        let low_arc: &'a mut Arc<&'a mut Mutex<&'a mut [T]>> = &mut Arc::from( &mut Mutex::new(low_part) );
+        let high_arc: &'a mut Arc<&'a mut Mutex<&'a mut [T]>> = &mut Arc::from( &mut Mutex::new(high_part) );
+
+        let handle1 = thread::spawn(move || {
+            merge_sort1(&low_arc, low_threads);
+        });
+
+        // let handle2 = thread::spawn(move || {
+        //     merge_sort1(&high_arc, high_threads);
+        // });
+
+        handle1.join().unwrap();
+        //handle2.join().unwrap();
+
+        sorted_arr = merge(arr_len, low_part, high_part);
+    }
+    
+    arr.copy_from_slice(sorted_arr.as_slice());
+}
+
+fn merge<T: Ord + Copy>(master_slice_len: usize, lower_slice: &[T], higher_slice: &[T]) -> Vec<T> {
     let lower_len = lower_slice.len();
     let higher_len = higher_slice.len();
 
