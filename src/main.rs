@@ -1,25 +1,25 @@
 use std::cmp::Ord;
 use std::marker::{Copy, Send};
-use std::thread;
-use std::thread::JoinHandle;
-use std::sync::{Arc, Mutex};
-use std::rc::Rc;
-use std::ops::{Deref, DerefMut};
-use std::collections::HashMap;
+// use std::thread;
+// use std::thread::JoinHandle;
+// use std::sync::{Arc, Mutex};
+// use std::rc::Rc;
+// use std::ops::{Deref, DerefMut};
+// use std::collections::HashMap;
 
 use rand::prelude::*;
 use crossbeam;
 
 fn main() {
     let mut rng = rand::thread_rng();
-    let total_numbers = 5;
-    let threads: i8 = 1;
+    let total_numbers = 10_000_000;
+    let threads: i8 = 4;
 
     if threads < 1 {
         panic!("Cannot run merge sort on {0} threads.", threads);
     }
 
-    let mut arr: Vec<i8> = (0..total_numbers).map(|_| rng.gen()).collect();
+    let mut arr: Vec<i64> = (0..total_numbers).map(|_| rng.gen()).collect();
 
     println!("Arr:");
     for val in &arr {
@@ -70,18 +70,17 @@ fn merge_sort1_singlethread<T: Ord + Copy>(arr: &mut [T]) {
     arr.copy_from_slice(sorted_arr.as_slice());
 }
 
-fn merge_sort1<'a, T: Ord + Copy + Send + std::marker::Sync>(arr: &mut [T], threads: i8) {
+fn merge_sort1<'a, T: Ord + Copy + Send + std::marker::Sync>(arr: &mut [T], threads: i8) -> &mut [T] {
     let arr_len = arr.len();
 
     if threads == 1 {
         merge_sort1_singlethread(arr);
-        return;
+        return arr;
     }
 
     let low_threads = threads / 2;
     let high_threads = threads - low_threads;
 
-    let sorted_arr: Vec<T>;
     let middle = arr_len / 2;
     let low_part: &mut [T];
     let high_part: &mut [T];
@@ -90,15 +89,16 @@ fn merge_sort1<'a, T: Ord + Copy + Send + std::marker::Sync>(arr: &mut [T], thre
     // let low_arc: &'a mut Arc<&'a mut Mutex<&'a mut [T]>> = &mut Arc::from( &mut Mutex::new(low_part) );
     // let high_arc: &'a mut Arc<&'a mut Mutex<&'a mut [T]>> = &mut Arc::from( &mut Mutex::new(high_part) );
 
-    sorted_arr = crossbeam::scope(|scope| {
+    let sorted_arr = crossbeam::scope(|scope| {
         let handle1 = scope.spawn(|_| merge_sort1(low_part, low_threads));
         let handle2 = scope.spawn(|_| merge_sort1(high_part, high_threads));
-        handle1.join();
-        handle2.join();
-        scope.spawn(|_| merge(arr_len, low_part, high_part) ).join().unwrap()
+        let low_part = handle1.join().unwrap();
+        let high_part = handle2.join().unwrap();
+        scope.spawn(move |_| merge(arr_len, low_part, high_part) ).join().unwrap()
     }).unwrap();
     
     arr.copy_from_slice(sorted_arr.as_slice());
+    arr
 }
 
 fn merge<T: Ord + Copy>(master_slice_len: usize, lower_slice: &[T], higher_slice: &[T]) -> Vec<T> {
