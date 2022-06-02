@@ -36,7 +36,7 @@ fn main() {
     }
 }
 
-fn merge_sort<'a, T: Ord + Copy + Send>(arr: &'a mut Vec<T>, threads: i8) {
+fn merge_sort<'a, T: Ord + Copy + Send + std::marker::Sync>(arr: &'a mut Vec<T>, threads: i8) {
     let slice: &'a mut [T] = arr.as_mut_slice();
     if threads == 1 {
         merge_sort1_singlethread(slice);
@@ -70,9 +70,7 @@ fn merge_sort1_singlethread<T: Ord + Copy>(arr: &mut [T]) {
     arr.copy_from_slice(sorted_arr.as_slice());
 }
 
-fn merge_sort1<'a, T: Ord + Copy + Send>(arr_arc: &'a mut [T], threads: i8) {
-
-    let arr = arr_arc;
+fn merge_sort1<'a, T: Ord + Copy + Send + std::marker::Sync>(arr: &mut [T], threads: i8) {
     let arr_len = arr.len();
 
     if threads == 1 {
@@ -84,26 +82,21 @@ fn merge_sort1<'a, T: Ord + Copy + Send>(arr_arc: &'a mut [T], threads: i8) {
     let high_threads = threads - low_threads;
 
     let sorted_arr: Vec<T>;
-    {
-        let middle = arr_len / 2;
-        let low_part: &'a mut [T];
-        let high_part: &'a mut [T];
-        (low_part, high_part) = arr.split_at_mut(middle);
+    let middle = arr_len / 2;
+    let low_part: &mut [T];
+    let high_part: &mut [T];
+    (low_part, high_part) = arr.split_at_mut(middle);
 
-        let low_arc = Arc::from(Mutex::new(low_part));
-        let high_arc = Arc::from(Mutex::new(high_part));
+    // let low_arc: &'a mut Arc<&'a mut Mutex<&'a mut [T]>> = &mut Arc::from( &mut Mutex::new(low_part) );
+    // let high_arc: &'a mut Arc<&'a mut Mutex<&'a mut [T]>> = &mut Arc::from( &mut Mutex::new(high_part) );
 
-        // let low_arc: &'a mut Arc<&'a mut Mutex<&'a mut [T]>> = &mut Arc::from( &mut Mutex::new(low_part) );
-        // let high_arc: &'a mut Arc<&'a mut Mutex<&'a mut [T]>> = &mut Arc::from( &mut Mutex::new(high_part) );
-
-        sorted_arr = crossbeam::scope(|scope| {
-            let handle1 = scope.spawn(move |_| merge_sort1(*low_arc.lock().unwrap(), low_threads));
-            let handle2 = scope.spawn(move |_| merge_sort1(*high_arc.lock().unwrap(), high_threads));
-            handle1.join();
-            handle2.join();
-            merge(arr_len, low_part, high_part)  
-        }).unwrap();
-    }
+    sorted_arr = crossbeam::scope(|scope| {
+        let handle1 = scope.spawn(|_| merge_sort1(low_part, low_threads));
+        let handle2 = scope.spawn(|_| merge_sort1(high_part, high_threads));
+        handle1.join();
+        handle2.join();
+        scope.spawn(|_| merge(arr_len, low_part, high_part) ).join().unwrap()
+    }).unwrap();
     
     arr.copy_from_slice(sorted_arr.as_slice());
 }
