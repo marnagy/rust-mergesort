@@ -1,4 +1,3 @@
-use rand::prelude::*;
 use std::cmp::Ord;
 use std::marker::{Copy, Send};
 use std::thread;
@@ -7,6 +6,9 @@ use std::sync::{Arc, Mutex};
 use std::rc::Rc;
 use std::ops::{Deref, DerefMut};
 use std::collections::HashMap;
+
+use rand::prelude::*;
+use crossbeam;
 
 fn main() {
     let mut rng = rand::thread_rng();
@@ -40,7 +42,7 @@ fn merge_sort<'a, T: Ord + Copy + Send>(arr: &'a mut Vec<T>, threads: i8) {
         merge_sort1_singlethread(slice);
     }
     else if threads >= 2 {
-        merge_sort1( &Arc::from( &mut Mutex::new(slice) ), threads);
+        merge_sort1(slice, threads);
     }
     else {
         panic!("Cannot sort with {0} threads.", threads);
@@ -68,16 +70,9 @@ fn merge_sort1_singlethread<T: Ord + Copy>(arr: &mut [T]) {
     arr.copy_from_slice(sorted_arr.as_slice());
 }
 
-fn merge_sort1<'a, T: Ord + Copy + Send>(arr_arc: &'a Arc<&'a mut Mutex<&'a mut [T]>>, threads: i8) {
-    let lock_res = arr_arc.lock();
+fn merge_sort1<'a, T: Ord + Copy + Send>(arr_arc: &'a mut [T], threads: i8) {
 
-    let arr: &'a mut [T];
-    let mut mutex_guard;
-    match lock_res {
-        Ok(mut_guard) => mutex_guard = mut_guard,
-        Err(err_num) => panic!("Failed to lock arr: {0}", err_num)
-    }
-    arr = *mutex_guard;
+    let arr = arr_arc;
     let arr_len = arr.len();
 
     if threads == 1 {
@@ -95,21 +90,19 @@ fn merge_sort1<'a, T: Ord + Copy + Send>(arr_arc: &'a Arc<&'a mut Mutex<&'a mut 
         let high_part: &'a mut [T];
         (low_part, high_part) = arr.split_at_mut(middle);
 
-        let low_arc: &'a mut Arc<&'a mut Mutex<&'a mut [T]>> = &mut Arc::from( &mut Mutex::new(low_part) );
-        let high_arc: &'a mut Arc<&'a mut Mutex<&'a mut [T]>> = &mut Arc::from( &mut Mutex::new(high_part) );
+        let low_arc = Arc::from(Mutex::new(low_part));
+        let high_arc = Arc::from(Mutex::new(high_part));
 
-        let handle1 = thread::spawn(move || {
-            merge_sort1(&low_arc, low_threads);
-        });
+        // let low_arc: &'a mut Arc<&'a mut Mutex<&'a mut [T]>> = &mut Arc::from( &mut Mutex::new(low_part) );
+        // let high_arc: &'a mut Arc<&'a mut Mutex<&'a mut [T]>> = &mut Arc::from( &mut Mutex::new(high_part) );
 
-        // let handle2 = thread::spawn(move || {
-        //     merge_sort1(&high_arc, high_threads);
-        // });
-
-        handle1.join().unwrap();
-        //handle2.join().unwrap();
-
-        sorted_arr = merge(arr_len, low_part, high_part);
+        sorted_arr = crossbeam::scope(|scope| {
+            let handle1 = scope.spawn(move |_| merge_sort1(*low_arc.lock().unwrap(), low_threads));
+            let handle2 = scope.spawn(move |_| merge_sort1(*high_arc.lock().unwrap(), high_threads));
+            handle1.join();
+            handle2.join();
+            merge(arr_len, low_part, high_part)  
+        }).unwrap();
     }
     
     arr.copy_from_slice(sorted_arr.as_slice());
