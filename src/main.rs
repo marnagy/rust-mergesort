@@ -1,11 +1,5 @@
 use std::cmp::Ord;
 use std::marker::{Copy, Send};
-// use std::thread;
-// use std::thread::JoinHandle;
-// use std::sync::{Arc, Mutex};
-// use std::rc::Rc;
-// use std::ops::{Deref, DerefMut};
-// use std::collections::HashMap;
 
 use rand::prelude::*;
 use crossbeam;
@@ -36,7 +30,7 @@ fn main() {
     }
 }
 
-fn merge_sort<'a, T: Ord + Copy + Send + std::marker::Sync>(arr: &'a mut Vec<T>, threads: i8) {
+fn merge_sort<'a, T: Ord + Copy + Send>(arr: &'a mut Vec<T>, threads: i8) {
     let slice: &'a mut [T] = arr.as_mut_slice();
     if threads == 1 {
         merge_sort1_singlethread(slice);
@@ -70,7 +64,7 @@ fn merge_sort1_singlethread<T: Ord + Copy>(arr: &mut [T]) {
     arr.copy_from_slice(sorted_arr.as_slice());
 }
 
-fn merge_sort1<'a, T: Ord + Copy + Send + std::marker::Sync>(arr: &mut [T], threads: i8) -> &mut [T] {
+fn merge_sort1<'a, T: Ord + Copy + Send>(arr: &mut [T], threads: i8) -> &mut [T] {
     let arr_len = arr.len();
 
     if threads == 1 {
@@ -85,9 +79,6 @@ fn merge_sort1<'a, T: Ord + Copy + Send + std::marker::Sync>(arr: &mut [T], thre
     let low_part: &mut [T];
     let high_part: &mut [T];
     (low_part, high_part) = arr.split_at_mut(middle);
-
-    // let low_arc: &'a mut Arc<&'a mut Mutex<&'a mut [T]>> = &mut Arc::from( &mut Mutex::new(low_part) );
-    // let high_arc: &'a mut Arc<&'a mut Mutex<&'a mut [T]>> = &mut Arc::from( &mut Mutex::new(high_part) );
 
     let sorted_arr = crossbeam::scope(|scope| {
         let handle1 = scope.spawn(|_| merge_sort1(low_part, low_threads));
