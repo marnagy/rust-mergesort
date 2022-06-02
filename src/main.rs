@@ -1,8 +1,16 @@
 use rand::prelude::*;
+use std::cmp::Ord;
+use std::marker::Copy;
+use std::thread::Thread;
 
 fn main() {
     let mut rng = rand::thread_rng();
     let total_numbers = 5;
+    let threads = 1;
+
+    if threads < 1 {
+        panic!("Cannot run merge sort on {0} threads.", threads);
+    }
 
     let mut arr: Vec<i8> = (0..total_numbers).map(|_| rng.gen()).collect();
 
@@ -12,7 +20,7 @@ fn main() {
     }
 
     println!("Starting sorting...");
-    merge_sort(&mut arr);
+    merge_sort(&mut arr, threads);
     println!("Array sorted.");
 
     println!("Arr after sort:");
@@ -21,12 +29,12 @@ fn main() {
     }
 }
 
-fn merge_sort<T: std::cmp::Ord + std::marker::Copy>(arr: &mut Vec<T>) {
+fn merge_sort<T: Ord + Copy>(arr: &mut Vec<T>, threads: i8) {
     let slice = arr.as_mut_slice();
-    merge_sort1(slice);
+    merge_sort1(slice, threads);
 }
 
-fn merge_sort1<T: std::cmp::Ord + std::marker::Copy>(arr: &mut [T]) {
+fn merge_sort1<T: Ord + Copy>(arr: &mut [T], threads: i8) {
     let arr_len = arr.len();
 
     if arr_len == 1 {
@@ -37,9 +45,11 @@ fn merge_sort1<T: std::cmp::Ord + std::marker::Copy>(arr: &mut [T]) {
     {
         let middle = arr_len / 2;
         let (low_part, high_part) = arr.split_at_mut(middle);
-
-        merge_sort1(low_part);
-        merge_sort1(high_part);
+        let low_threads = (threads as f64 / 2f64).floor() as i8;
+        let high_threads = (threads as f64 / 2f64).ceil() as i8;
+        
+        merge_sort1(low_part, low_threads);        
+        merge_sort1(high_part, high_threads);
 
         sorted_arr = merge(arr_len, low_part, high_part);
     }
@@ -47,7 +57,7 @@ fn merge_sort1<T: std::cmp::Ord + std::marker::Copy>(arr: &mut [T]) {
     arr.copy_from_slice(sorted_arr.as_slice());
 }
 
-fn merge<T: std::cmp::Ord + std::marker::Copy>(master_slice_len: usize, lower_slice: &[T], higher_slice: &[T]) -> Vec<T> {
+fn merge<T: Ord + Copy>(master_slice_len: usize, lower_slice: &[T], higher_slice: &[T]) -> Vec<T> {
     let lower_len = lower_slice.len();
     let higher_len = higher_slice.len();
 
