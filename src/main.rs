@@ -30,8 +30,8 @@ fn main() {
     }
 }
 
-fn merge_sort<'a, T: Ord + Copy + Send>(arr: &'a mut Vec<T>, threads: i8) {
-    let slice: &'a mut [T] = arr.as_mut_slice();
+fn merge_sort<T: Ord + Copy + Send>(arr: &mut Vec<T>, threads: i8) {
+    let slice: &mut [T] = arr.as_mut_slice();
     if threads == 1 {
         merge_sort1_singlethread(slice);
     }
@@ -64,7 +64,7 @@ fn merge_sort1_singlethread<T: Ord + Copy>(arr: &mut [T]) {
     arr.copy_from_slice(sorted_arr.as_slice());
 }
 
-fn merge_sort1<'a, T: Ord + Copy + Send>(arr: &mut [T], threads: i8) -> &mut [T] {
+fn merge_sort1<T: Ord + Copy + Send>(arr: &mut [T], threads: i8) -> &mut [T] {
     let arr_len = arr.len();
 
     if threads == 1 {
